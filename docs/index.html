@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TAC Growth — Budget Tracker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="header">
+    <div class="header-inner">
+      <div class="header-left">
+        <span class="logo">Agency 8</span>
+        <span class="logo-sub">The Absorption Company (Growth) Budget Tracker</span>
+      </div>
+      <button class="btn-add" id="btn-add-entry">+ Add Entry</button>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- Budget bar -->
+    <div class="budget-card">
+      <div class="budget-top">
+        <div>
+          <span class="budget-num" id="total-spent">$0</span>
+          <span class="budget-of">spent of $150,000</span>
+        </div>
+        <span class="budget-rem" id="total-remaining">$150,000 remaining</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill actual" id="progress-actual" style="width:0%"></div>
+      </div>
+    </div>
+
+    <!-- DocuSign inbox (pending review) -->
+    <div class="budget-card hidden" id="inbox-section" style="border:1px solid #d29922;background:#1c1607">
+      <div style="font-weight:700;margin-bottom:2px">📥 Needs Review <span id="inbox-count" style="color:#d29922"></span></div>
+      <div style="color:#8b949e;font-size:12px;margin-bottom:6px" id="inbox-desc"></div>
+      <div id="inbox-list"></div>
+    </div>
+
+    <!-- Category cards — each has its own budget cap here (Hair $50k, Berberine/WLP-1
+         $100k), unlike every other tracker where cards just show spend with no
+         individual target -->
+    <div class="cat-grid">
+      <div class="cat-card hair"      id="cc-hair"           data-cat="hair">
+        <div class="cc-label">Hair</div>
+        <div class="cc-num"   id="cat-hair-actual">$0 of $50,000</div>
+        <div class="cc-bar-wrap"><div class="cc-bar-fill" id="cat-hair-bar" style="width:0%"></div></div>
+        <div class="cc-hint" id="cat-hair-remaining">$50,000 remaining</div>
+      </div>
+      <div class="cat-card berberine" id="cc-berberine_wlp1" data-cat="berberine_wlp1">
+        <div class="cc-label">Berberine / WLP-1</div>
+        <div class="cc-num"   id="cat-berberine_wlp1-actual">$0 of $100,000</div>
+        <div class="cc-bar-wrap"><div class="cc-bar-fill" id="cat-berberine_wlp1-bar" style="width:0%"></div></div>
+        <div class="cc-hint" id="cat-berberine_wlp1-remaining">$100,000 remaining</div>
+      </div>
+    </div>
+
+    <!-- Active filter banner -->
+    <div class="filter-banner hidden" id="filter-banner">
+      Showing: <strong id="filter-banner-label"></strong>
+      <button class="filter-clear" id="filter-clear">✕ Clear filter</button>
+    </div>
+
+    <!-- View toggle -->
+    <div class="view-toggle">
+      <button class="vt-btn active" data-view="table" id="vt-table">☰ List</button>
+      <button class="vt-btn"        data-view="calendar" id="vt-calendar">📅 Calendar</button>
+      <button class="vt-btn"        data-view="invoice"  id="vt-invoice">✓ Ready to Invoice</button>
+      <button class="vt-btn"        data-view="sent"     id="vt-sent">📤 Invoices Sent to Lumanu</button>
+    </div>
+
+    <!-- LIST VIEW -->
+    <div id="view-table">
+      <div class="toolbar">
+        <input type="search" id="search-input" class="search-box" placeholder="Search creator, description…">
+      </div>
+
+      <!-- Lumanu bulk export bar -->
+      <div class="lumanu-export-bar hidden" id="lumanu-export-bar">
+        <span id="lumanu-export-count">0 selected</span>
+        <button class="btn-sec" id="btn-clear-selection">Clear</button>
+        <button class="btn-pri" id="btn-export-lumanu">⬇ Send to Lumanu</button>
+      </div>
+
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th></th>
+              <th class="sh" data-col="date">Date</th>
+              <th class="sh" data-col="category">Category</th>
+              <th>Creator / Description</th>
+              <th class="sh" data-col="amount">Amount</th>
+              <th>Lumanu</th>
+              <th>Notes</th>
+              <th>Ready to Bill</th>
+              <th>Invoice</th>
+              <th>Contract</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="entries-tbody">
+            <tr><td colspan="11" class="empty-cell">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CALENDAR VIEW -->
+    <div id="view-calendar" class="hidden">
+      <div class="cal-nav-row">
+        <button class="cal-btn" id="cal-prev">← Prev</button>
+        <span class="cal-month-label" id="cal-title"></span>
+        <button class="cal-btn" id="cal-next">Next →</button>
+      </div>
+      <div class="cal-key">
+        <span class="cal-dot hair">Hair</span>
+        <span class="cal-dot berberine_wlp1">Berberine / WLP-1</span>
+      </div>
+      <div class="cal-dow-row">
+        <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div>
+        <div>Thu</div><div>Fri</div><div>Sat</div>
+      </div>
+      <div class="cal-grid" id="cal-days"></div>
+      <div class="cal-detail hidden" id="cal-detail">
+        <div class="cal-detail-hdr">
+          <span id="cal-detail-date"></span>
+          <button class="cal-close" id="cal-detail-close">✕</button>
+        </div>
+        <table class="tbl">
+          <thead>
+            <tr><th>Category</th><th>Creator / Description</th><th>Amount</th><th>Notes</th></tr>
+          </thead>
+          <tbody id="cal-detail-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- INVOICE VIEW -->
+    <div id="view-invoice" class="hidden">
+      <div class="invoice-summary" id="invoice-summary"></div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th class="sh" data-col="date">Date</th>
+              <th class="sh" data-col="category">Category</th>
+              <th>Creator / Description</th>
+              <th class="sh" data-col="amount">Amount</th>
+              <th>Notes</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="invoice-tbody">
+            <tr><td colspan="6" class="empty-cell">No entries marked ready to invoice.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SENT TO LUMANU VIEW -->
+    <div id="view-sent" class="hidden">
+      <div class="invoice-summary" id="sent-summary"></div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th class="sh" data-col="date">Date</th>
+              <th class="sh" data-col="category">Category</th>
+              <th>Creator / Description</th>
+              <th class="sh" data-col="amount">Amount</th>
+              <th>Sent To</th>
+              <th>Lumanu Status</th>
+            </tr>
+          </thead>
+          <tbody id="sent-tbody">
+            <tr><td colspan="6" class="empty-cell">No invoices sent to Lumanu yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Add Entry Modal -->
+  <div class="overlay hidden" id="modal-overlay">
+    <div class="modal">
+      <div class="modal-hdr">
+        <h3 id="modal-title">Add Entry</h3>
+        <button class="modal-x" id="modal-close">✕</button>
+      </div>
+      <form id="entry-form">
+        <div class="fld">
+          <label>Date</label>
+          <input type="date" id="f-date" required>
+        </div>
+        <div class="fld">
+          <label>Category</label>
+          <select id="f-category" required>
+            <option value="">— select —</option>
+            <option value="hair">Hair</option>
+            <option value="berberine_wlp1">Berberine / WLP-1</option>
+          </select>
+        </div>
+        <div class="fld" id="field-handle">
+          <label>Creator Handle</label>
+          <input type="text" id="f-handle" placeholder="@username">
+        </div>
+        <div class="fld">
+          <label>Description</label>
+          <input type="text" id="f-description" placeholder="e.g. Wave 1 PR mailers…">
+        </div>
+        <div class="fld">
+          <label>Amount ($)</label>
+          <input type="number" id="f-amount" min="0" step="0.01" required placeholder="0.00">
+        </div>
+        <div class="fld">
+          <label>Notes <span style="font-weight:400;text-transform:none;font-size:10px">(optional)</span></label>
+          <textarea id="f-notes" rows="2" placeholder="Any extra context…"></textarea>
+        </div>
+        <div id="field-lumanu">
+          <div class="fld">
+            <label>Lumanu Billing ID <span style="font-weight:400;text-transform:none;font-size:10px">(Lumanu ID or billing email)</span></label>
+            <input type="text" id="f-billing-id" placeholder="LU5231USHA or creator@email.com">
+          </div>
+          <div class="form-row">
+            <div class="fld">
+              <label>Due Date</label>
+              <input type="date" id="f-due-date">
+            </div>
+            <div class="fld">
+              <label>PO # <span style="font-weight:400;text-transform:none;font-size:10px">(optional)</span></label>
+              <input type="text" id="f-po" placeholder="14512">
+            </div>
+          </div>
+          <div class="fld">
+            <label>Lumanu Status</label>
+            <select id="f-lumanu-status">
+              <option value="not_sent">Not Sent</option>
+              <option value="needs_approval">Needs Approval</option>
+              <option value="approved">Approved</option>
+              <option value="pending">Pending</option>
+              <option value="issued">Issued</option>
+              <option value="canceled">Canceled</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-sec" id="btn-cancel">Cancel</button>
+          <button type="submit" class="btn-pri" id="btn-submit">Add Entry</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Delete confirm -->
+  <div class="overlay hidden" id="delete-overlay">
+    <div class="modal modal-sm">
+      <div class="modal-hdr"><h3>Delete this entry?</h3></div>
+      <p style="color:#8b949e;font-size:13px;margin-bottom:20px">This cannot be undone.</p>
+      <div class="modal-footer">
+        <button class="btn-sec" id="delete-cancel">Cancel</button>
+        <button class="btn-danger" id="delete-confirm">Delete</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
