@@ -1,23 +1,51 @@
 // TAC Growth Budget Tracker — cloned from the MadeGood/Moon Juice trackers
 // 2026-09-24, Lumanu integration included from the start (see
-// budget-tracker-lumanu-bridge). Deliberately only 2 categories, not the
-// usual a8_paid/{client}_paid/shipping 3 — Emmett's call: the two campaigns
-// themselves (Hair, Berberine/WLP-1) are the categories, each with its own
-// budget cap (unlike every other tracker, which only tracks one combined
-// total) — see CAT_BUDGETS below.
+// budget-tracker-lumanu-bridge). Deliberately only a handful of categories,
+// not the usual a8_paid/{client}_paid/shipping 3 — Emmett's call: the
+// campaigns themselves (Hair, Berberine, WLP-1) are the categories, each
+// with its own budget cap (unlike every other tracker, which only tracks
+// one combined total) — see MONTH_BUDGETS below.
+//
+// Month-aware budgets (Emmett, 2026-10-08) — September and October track
+// completely different category splits: September has one combined
+// Berberine+WLP-1 bucket ($100k, Michael never broke it down further that
+// month), October tracks Berberine and WLP-1 separately ($52,854 / $88,090)
+// per Michael's percentage breakdown, since there's now enough budget to
+// make that split meaningful. October's total ($176,180) = $100,000 new
+// allocation + $76,180 rolled over unspent from September.
+//
+// The old combined 'berberine_wlp1' category value is kept valid (not
+// migrated away) so existing September rows don't need to be individually
+// reclassified — September's combined card sums it alongside the new
+// granular 'berberine'/'wlp1' values, should anyone use those for a
+// September entry too. A row's own `month` field (not its category) is
+// the real signal for which month's budget it counts against.
+const MONTH_BUDGETS = {
+  September: {
+    total: 150_000,
+    cats: {
+      hair:           { label: 'Hair',              budget: 50_000,  match: ['hair'] },
+      berberine_wlp1: { label: 'Berberine / WLP-1', budget: 100_000, match: ['berberine_wlp1', 'berberine', 'wlp1'] },
+    },
+  },
+  October: {
+    total: 176_180,
+    cats: {
+      hair:      { label: 'Hair',      budget: 35_236, match: ['hair'] },
+      berberine: { label: 'Berberine', budget: 52_854, match: ['berberine'] },
+      wlp1:      { label: 'WLP-1',     budget: 88_090, match: ['wlp1'] },
+    },
+  },
+};
+let currentMonth = 'October';   // defaults to the current real-world month
 
-const TOTAL_BUDGET = 150_000;
 const CATS = {
   hair:           'Hair',
   berberine_wlp1: 'Berberine / WLP-1',
+  berberine:      'Berberine',
+  wlp1:           'WLP-1',
 };
-// Per-category budget cap — new for this tracker; every other one only
-// tracks a single combined TOTAL_BUDGET across all its categories.
-const CAT_BUDGETS = {
-  hair:           50_000,
-  berberine_wlp1: 100_000,
-};
-const PAID_CATS = ['hair', 'berberine_wlp1'];   // both go through Lumanu — no separate non-influencer bucket here
+const PAID_CATS = ['hair', 'berberine_wlp1', 'berberine', 'wlp1'];   // all go through Lumanu — no separate non-influencer bucket here
 
 const LUMANU_STATUSES = {
   not_sent:       'Not Sent',
@@ -153,28 +181,61 @@ function renderInbox() {
 }
 
 function renderSummary() {
-  const tAct = sum(rows);
+  const monthConfig = MONTH_BUDGETS[currentMonth];
+  const monthRows = rows.filter(r => r.month === currentMonth);
+  const tAct = sum(monthRows);
 
   setText('total-spent',     fmt(tAct));
-  setText('total-remaining', fmt(TOTAL_BUDGET - tAct) + ' remaining');
+  setText('total-of',        `spent of ${fmt(monthConfig.total)}`);
+  setText('total-remaining', fmt(monthConfig.total - tAct) + ' remaining');
 
-  const aPct = Math.min(tAct / TOTAL_BUDGET * 100, 100);
+  const aPct = Math.min(tAct / monthConfig.total * 100, 100);
   setStyle('progress-actual', 'width', aPct + '%');
 
-  for (const cat of Object.keys(CATS)) {
-    const ca = sum(rows.filter(r => r.category === cat));
-    const catBudget = CAT_BUDGETS[cat];
-    setText(`cat-${cat}-actual`, fmt(ca) + ` of ${fmt(catBudget)}`);
-    const pct = Math.min(ca / catBudget * 100, 100);
-    setStyle(`cat-${cat}-bar`, 'width', pct + '%');
-    setText(`cat-${cat}-remaining`, fmt(catBudget - ca) + ' remaining');
-  }
+  document.querySelectorAll('.month-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.month === currentMonth));
+
+  renderCatGrid(monthRows, monthConfig);
+}
+
+function renderCatGrid(monthRows, monthConfig) {
+  const grid = document.getElementById('cat-grid');
+  if (!grid) return;
+  grid.innerHTML = Object.entries(monthConfig.cats).map(([key, cfg]) => {
+    const ca = sum(monthRows.filter(r => cfg.match.includes(r.category)));
+    const pct = Math.min(ca / cfg.budget * 100, 100);
+    return `
+      <div class="cat-card ${key}${catFilter === key ? ' selected' : ''}" data-cat="${key}">
+        <div class="cc-label">${cfg.label}</div>
+        <div class="cc-num">${fmt(ca)} of ${fmt(cfg.budget)}</div>
+        <div class="cc-bar-wrap"><div class="cc-bar-fill" style="width:${pct}%"></div></div>
+        <div class="cc-hint">${fmt(cfg.budget - ca)} remaining</div>
+      </div>`;
+  }).join('');
+
+  grid.querySelectorAll('.cat-card').forEach(card => card.addEventListener('click', () => {
+    const key = card.dataset.cat;
+    if (catFilter === key) {
+      catFilter = null;
+      document.getElementById('filter-banner').classList.add('hidden');
+    } else {
+      catFilter = key;
+      setText('filter-banner-label', monthConfig.cats[key].label);
+      document.getElementById('filter-banner').classList.remove('hidden');
+      if (view !== 'table') switchView('table');
+    }
+    renderSummary();
+    renderTable();
+  }));
 }
 
 // ── Table view ────────────────────────────────────────────────────────────────
 function filtered() {
-  let data = [...rows];
-  if (catFilter) data = data.filter(r => r.category === catFilter);
+  let data = rows.filter(r => r.month === currentMonth);
+  if (catFilter) {
+    const match = MONTH_BUDGETS[currentMonth].cats[catFilter]?.match || [catFilter];
+    data = data.filter(r => match.includes(r.category));
+  }
   if (search) {
     const q = search.toLowerCase();
     data = data.filter(r =>
@@ -505,6 +566,7 @@ function bindAll() {
     const paid = PAID_CATS.includes(cat);
     const payload = {
       date:           document.getElementById('f-date').value,
+      month:          document.getElementById('f-month').value,
       entry_type:     'actual',
       category:       cat,
       creator_handle: paid ? (document.getElementById('f-handle').value.trim().replace(/^@/,'') || null) : null,
@@ -551,22 +613,17 @@ function bindAll() {
     await load();
   });
 
-  // Category cards — click to filter
-  document.querySelectorAll('.cat-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const cat = card.dataset.cat;
-      if (catFilter === cat) {
-        catFilter = null;
-        card.classList.remove('selected');
-        document.getElementById('filter-banner').classList.add('hidden');
-      } else {
-        catFilter = cat;
-        document.querySelectorAll('.cat-card').forEach(c => c.classList.remove('selected'));
-        card.classList.add('selected');
-        setText('filter-banner-label', CATS[cat]);
-        document.getElementById('filter-banner').classList.remove('hidden');
-        if (view !== 'table') switchView('table');
-      }
+  // Category cards are rendered dynamically (their count/labels change per
+  // month) — their click-to-filter wiring lives in renderCatGrid() instead
+  // of here, re-wired fresh every time the grid re-renders.
+
+  // Month toggle (September / October)
+  document.querySelectorAll('.month-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentMonth = btn.dataset.month;
+      catFilter = null;
+      document.getElementById('filter-banner').classList.add('hidden');
+      renderSummary();
       renderTable();
     });
   });
@@ -574,8 +631,8 @@ function bindAll() {
   // Clear filter banner
   document.getElementById('filter-clear').addEventListener('click', () => {
     catFilter = null;
-    document.querySelectorAll('.cat-card').forEach(c => c.classList.remove('selected'));
     document.getElementById('filter-banner').classList.add('hidden');
+    renderSummary();
     renderTable();
   });
 
@@ -732,6 +789,7 @@ function openModal() {
   document.getElementById('btn-submit').textContent  = 'Add Entry';
   document.getElementById('entry-form').reset();
   document.getElementById('f-date').value = todayStr();
+  document.getElementById('f-month').value = currentMonth;
   document.getElementById('f-lumanu-status').value = 'not_sent';
   document.getElementById('field-handle').classList.remove('hidden');
   document.getElementById('field-lumanu').classList.remove('hidden');
@@ -743,6 +801,7 @@ function openEditModal(entry) {
   document.getElementById('btn-submit').textContent  = 'Save Changes';
   document.getElementById('entry-form').reset();
   document.getElementById('f-date').value        = entry.date;
+  document.getElementById('f-month').value       = entry.month || 'September';
   document.getElementById('f-category').value    = entry.category || '';
   document.getElementById('f-handle').value      = entry.creator_handle || '';
   document.getElementById('f-description').value = entry.description || '';

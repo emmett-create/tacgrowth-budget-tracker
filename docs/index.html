@@ -21,14 +21,24 @@
 
   <div class="container">
 
+    <!-- Month toggle (2026-10-08) — September and October track completely
+         different budget splits (September: Hair + one combined Berberine/WLP-1
+         bucket; October: Hair, Berberine, and WLP-1 all tracked separately),
+         so everything below (the total bar, category cards, and the table)
+         scopes to whichever month is selected here. -->
+    <div class="month-toggle" style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn-sec month-btn" data-month="September">September</button>
+      <button class="btn-sec month-btn" data-month="October">October</button>
+    </div>
+
     <!-- Budget bar -->
     <div class="budget-card">
       <div class="budget-top">
         <div>
           <span class="budget-num" id="total-spent">$0</span>
-          <span class="budget-of">spent of $150,000</span>
+          <span class="budget-of" id="total-of">spent of $0</span>
         </div>
-        <span class="budget-rem" id="total-remaining">$150,000 remaining</span>
+        <span class="budget-rem" id="total-remaining">$0 remaining</span>
       </div>
       <div class="progress-track">
         <div class="progress-fill actual" id="progress-actual" style="width:0%"></div>
@@ -42,23 +52,12 @@
       <div id="inbox-list"></div>
     </div>
 
-    <!-- Category cards — each has its own budget cap here (Hair $50k, Berberine/WLP-1
-         $100k), unlike every other tracker where cards just show spend with no
-         individual target -->
-    <div class="cat-grid">
-      <div class="cat-card hair"      id="cc-hair"           data-cat="hair">
-        <div class="cc-label">Hair</div>
-        <div class="cc-num"   id="cat-hair-actual">$0 of $50,000</div>
-        <div class="cc-bar-wrap"><div class="cc-bar-fill" id="cat-hair-bar" style="width:0%"></div></div>
-        <div class="cc-hint" id="cat-hair-remaining">$50,000 remaining</div>
-      </div>
-      <div class="cat-card berberine" id="cc-berberine_wlp1" data-cat="berberine_wlp1">
-        <div class="cc-label">Berberine / WLP-1</div>
-        <div class="cc-num"   id="cat-berberine_wlp1-actual">$0 of $100,000</div>
-        <div class="cc-bar-wrap"><div class="cc-bar-fill" id="cat-berberine_wlp1-bar" style="width:0%"></div></div>
-        <div class="cc-hint" id="cat-berberine_wlp1-remaining">$100,000 remaining</div>
-      </div>
-    </div>
+    <!-- Category cards — each has its own budget cap, unlike every other
+         tracker where cards just show spend with no individual target. Count
+         and labels vary per month (September: 2 cards, October: 3), so this
+         grid is now rendered dynamically by renderCatGrid() in app.js rather
+         than hardcoded here. -->
+    <div class="cat-grid" id="cat-grid"></div>
 
     <!-- Active filter banner -->
     <div class="filter-banner hidden" id="filter-banner">
@@ -200,11 +199,20 @@
           <input type="date" id="f-date" required>
         </div>
         <div class="fld">
+          <label>Budget Month</label>
+          <select id="f-month" required>
+            <option value="September">September</option>
+            <option value="October">October</option>
+          </select>
+        </div>
+        <div class="fld">
           <label>Category</label>
           <select id="f-category" required>
             <option value="">— select —</option>
             <option value="hair">Hair</option>
-            <option value="berberine_wlp1">Berberine / WLP-1</option>
+            <option value="berberine_wlp1">Berberine / WLP-1 (September only)</option>
+            <option value="berberine">Berberine</option>
+            <option value="wlp1">WLP-1</option>
           </select>
         </div>
         <div class="fld" id="field-handle">
