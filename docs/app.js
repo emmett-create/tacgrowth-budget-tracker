@@ -75,7 +75,8 @@ let selected    = new Set();   // ids checked off for Lumanu send
 // ── Boot ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   bindAll();
-  load();
+  load().then(syncLumanuStatus);
+  setInterval(syncLumanuStatus, 60_000);
 });
 
 // ── Data ─────────────────────────────────────────────────────────────────────
@@ -372,6 +373,27 @@ async function addContractLink(entryId) {
 // ── Lumanu send (direct API, via the shared budget-tracker-lumanu-bridge service) ──
 const BRIDGE_API = 'https://budget-tracker-lumanu-bridge.onrender.com';
 const CLIENT_KEY = 'tacgrowth';   // must match the key in the bridge's config.py CLIENTS dict
+
+// Silently pulls real status straight from Lumanu for anything stuck at
+// "Needs Approval" — catches cases where a webhook retry already gave up
+// before our side started answering it correctly (e.g. the 2026-09-15 to
+// 2026-10-14 header-name bug). No password: read-only status mirror, safe
+// to run automatically. Runs on page load and every 60s afterward.
+let lumanuSyncing = false;
+async function syncLumanuStatus() {
+  if (lumanuSyncing) return;
+  lumanuSyncing = true;
+  try {
+    const r = await fetch(`${BRIDGE_API}/api/lumanu/reconcile/${CLIENT_KEY}`, { method: 'POST' });
+    if (!r.ok) return;
+    const { updated } = await r.json();
+    if (updated.length) await load();
+  } catch {
+    // Silent — this is a background convenience, not a user-initiated action.
+  } finally {
+    lumanuSyncing = false;
+  }
+}
 
 function updateExportBar() {
   const bar = document.getElementById('lumanu-export-bar');
