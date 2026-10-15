@@ -278,6 +278,22 @@
     </div>
   </div>
 
+  <!-- Possible duplicate (2026-10-14, Emmett — invoices coming through that
+       duplicate an already-manually-added entry for the same creator) -->
+  <div class="overlay hidden" id="dup-overlay">
+    <div class="modal">
+      <div class="modal-hdr"><h3>Possible duplicate</h3></div>
+      <p style="color:#8b949e;font-size:13px;margin-bottom:14px">
+        <strong id="dup-handle"></strong> already has an entry in this tracker — is this the same payment?
+      </p>
+      <div id="dup-compare" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px"></div>
+      <div class="modal-footer">
+        <button class="btn-sec" id="dup-keep-both">No, keep both</button>
+        <button class="btn-pri" id="dup-replace">Yes, replace the old one</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 <script src="config.js"></script>
 <script src="app.js"></script>

@@ -71,6 +71,14 @@ let deleteId    = null;
 let editId      = null;
 let pending     = [];   // DocuSign / invoice inbox items awaiting review (status = 'pending')
 let selected    = new Set();   // ids checked off for Lumanu send
+let dupContext  = null;   // {mode, dupRow, payload|entry, isEdit, editId} while the possible-duplicate modal is open
+// Once the Assign+add click already warned about a duplicate for this inbox
+// entry's handle, don't ask again on Save Changes unless the handle in the
+// form was actually changed to something else (Emmett, 2026-10-14 — wanted
+// the check at the point of clicking Assign, not buried after filling out
+// the whole form).
+let dupResolvedId     = null;
+let dupResolvedHandle = null;
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -173,7 +181,19 @@ function renderInbox() {
   list.querySelectorAll('.btn-inbox-go').forEach(b =>
     b.addEventListener('click', () => {
       const entry = pending.find(r => String(r.id) === b.dataset.id);
-      if (entry) openEditModal(entry);   // reuse the form to set campaign + amount
+      if (!entry) return;
+      // Duplicate check right at the Assign+add click (Emmett's call,
+      // 2026-10-14 — not buried after filling out the whole edit form), using
+      // whatever handle the inbox item already carries (e.g. extracted from
+      // the invoice). The form's own Save Changes still re-checks too, in
+      // case the handle was blank/unknown here and gets typed in by hand.
+      const handle = (entry.creator_handle || '').trim().replace(/^@/, '');
+      const dupRow = handle && rows.find(r => (r.creator_handle || '').toLowerCase() === handle.toLowerCase());
+      if (dupRow) {
+        openDupModal(dupRow, entry, true, entry.id, { mode: 'pre' });
+      } else {
+        openEditModal(entry);   // reuse the form to set campaign + amount
+      }
     })
   );
   list.querySelectorAll('.btn-inbox-x').forEach(b =>
@@ -601,7 +621,31 @@ function bindAll() {
       lumanu_status:  paid ? document.getElementById('f-lumanu-status').value : 'not_sent',
       status:         'confirmed',   // saving always confirms (incl. completing an inbox item)
     };
-    const ok = isEdit ? await update(editId, payload) : await insert(payload);
+
+    // Duplicate check (2026-10-14, Emmett — invoices coming through that
+    // duplicate an already-manually-added entry for the same creator).
+    // Scoped to ONLY completing a pending inbox item (Assign + add) — Emmett's
+    // explicit call: manual "+ Add Entry" should never trigger this. The main
+    // check now runs right at the Assign+add click (see renderInbox) before
+    // this form even opens — this is a backstop for when the inbox entry's
+    // handle was blank/unknown at that point and got typed in by hand here.
+    // Skipped when it's the exact same handle the Assign+add click already
+    // warned about and resolved, so Save Changes doesn't ask twice.
+    const alreadyResolved = editId === dupResolvedId
+      && (payload.creator_handle || '').toLowerCase() === dupResolvedHandle;
+    const wasPending = isEdit && pending.some(p => String(p.id) === String(editId));
+    if (wasPending && payload.creator_handle && !alreadyResolved) {
+      const dupRow = rows.find(r =>
+        String(r.id) !== String(editId) &&
+        (r.creator_handle || '').toLowerCase() === payload.creator_handle.toLowerCase());
+      if (dupRow) {
+        btn.disabled = false; btn.textContent = isEdit ? 'Save Changes' : 'Add Entry';
+        openDupModal(dupRow, payload, isEdit, editId);
+        return;
+      }
+    }
+
+    const ok = await performSave(payload, isEdit, editId);
     btn.disabled = false; btn.textContent = isEdit ? 'Save Changes' : 'Add Entry';
     if (!ok) { alert('Error saving — please try again.'); return; }
     closeModal();
@@ -613,6 +657,50 @@ function bindAll() {
     const show = PAID_CATS.includes(e.target.value);
     document.getElementById('field-handle').classList.toggle('hidden', !show);
     document.getElementById('field-lumanu').classList.toggle('hidden', !show);
+  });
+
+  // Possible-duplicate modal buttons. In 'pre' mode (warned right at the
+  // Assign+add click, before the edit form even opened) neither button saves
+  // anything yet — they just resolve the warning and hand off to the normal
+  // edit form so campaign/amount can still be reviewed before it's actually
+  // saved. In 'post' mode (the form's own Save Changes re-check) both buttons
+  // save immediately, same as before.
+  document.getElementById('dup-keep-both').addEventListener('click', async () => {
+    if (!dupContext) return;
+    const { mode, payload, isEdit, editId: eid } = dupContext;
+    if (mode === 'pre') {
+      dupResolvedId = eid;
+      dupResolvedHandle = (payload.creator_handle || '').toLowerCase();
+      closeDupModal();
+      openEditModal(payload);
+      return;
+    }
+    const ok = await performSave(payload, isEdit, eid);
+    closeDupModal();
+    if (!ok) { alert('Error saving — please try again.'); return; }
+    closeModal();
+    await load();
+  });
+  document.getElementById('dup-replace').addEventListener('click', async () => {
+    if (!dupContext) return;
+    const { mode, payload, isEdit, editId: eid, dupRow } = dupContext;
+    await remove(dupRow.id);
+    if (mode === 'pre') {
+      dupResolvedId = eid;
+      dupResolvedHandle = (payload.creator_handle || '').toLowerCase();
+      closeDupModal();
+      await load();   // refresh so the just-removed duplicate drops out of `rows`
+      openEditModal(payload);
+      return;
+    }
+    const ok = await performSave(payload, isEdit, eid);
+    closeDupModal();
+    if (!ok) { alert('Error saving — please try again.'); return; }
+    closeModal();
+    await load();
+  });
+  document.getElementById('dup-overlay').addEventListener('click', e => {
+    if (e.target.id === 'dup-overlay') closeDupModal();
   });
 
   // Send to Lumanu (direct API)
@@ -840,6 +928,8 @@ function openEditModal(entry) {
 }
 function closeModal() {
   editId = null;
+  dupResolvedId = null;
+  dupResolvedHandle = null;
   document.getElementById('modal-overlay').classList.add('hidden');
 }
 function openDelete(id) {
@@ -849,6 +939,37 @@ function openDelete(id) {
 function closeDelete() {
   deleteId = null;
   document.getElementById('delete-overlay').classList.add('hidden');
+}
+
+// ── Save + possible-duplicate check ─────────────────────────────────────────
+// Pulled out of the submit handler so both the normal (no-duplicate) path
+// and the duplicate modal's two buttons can call the same save logic.
+async function performSave(payload, isEdit, id) {
+  return isEdit ? await update(id, payload) : await insert(payload);
+}
+
+function dupCard(label, entry) {
+  return `
+    <div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#8b949e;margin-bottom:8px">${label}</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:6px">${fmt(+entry.amount)}</div>
+      <div style="color:#8b949e;font-size:12px;margin-bottom:4px">${fmtDate(entry.date)}</div>
+      <div style="font-size:13px">${esc(entry.description || '')}</div>
+      ${entry.notes ? `<div style="color:#8b949e;font-size:12px;margin-top:6px">${esc(entry.notes)}</div>` : ''}
+    </div>`;
+}
+
+function openDupModal(dupRow, payload, isEdit, editId, opts) {
+  const mode = opts?.mode || 'post';   // 'pre' = Assign+add click, before the edit form opens; 'post' = Save Changes
+  dupContext = { mode, dupRow, payload, isEdit, editId };
+  document.getElementById('dup-handle').textContent = `@${payload.creator_handle}`;
+  document.getElementById('dup-compare').innerHTML =
+    dupCard('Already in tracker', dupRow) + dupCard('This new one', payload);
+  document.getElementById('dup-overlay').classList.remove('hidden');
+}
+function closeDupModal() {
+  dupContext = null;
+  document.getElementById('dup-overlay').classList.add('hidden');
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
