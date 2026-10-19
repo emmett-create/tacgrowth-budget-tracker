@@ -29,11 +29,11 @@ const MONTH_BUDGETS = {
     },
   },
   October: {
-    total: 176_180,
+    total: 181_180,
     cats: {
-      hair:      { label: 'Hair',      budget: 35_236, match: ['hair'] },
-      berberine: { label: 'Berberine', budget: 52_854, match: ['berberine'] },
-      wlp1:      { label: 'WLP-1',     budget: 88_090, match: ['wlp1'] },
+      hair:      { label: 'Hair',      budget: 36_236, match: ['hair'] },
+      berberine: { label: 'Berberine', budget: 54_354, match: ['berberine'] },
+      wlp1:      { label: 'WLP-1',     budget: 90_590, match: ['wlp1'] },
     },
   },
 };
