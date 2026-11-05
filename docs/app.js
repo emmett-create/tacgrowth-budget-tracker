@@ -165,9 +165,17 @@ function renderInbox() {
     const kind = isInvoice
       ? '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#d29922;background:#2d2107;border-radius:4px;padding:2px 6px">Invoice</span>'
       : '';
+    // The webhook's PDF upload to Storage can fail even though the rest of
+    // the entry's data came through fine (see budget-tracker-lumanu-bridge's
+    // receive_invoice()) — flagged here instead of silently showing up as a
+    // normal-looking entry with no invoice attached.
+    const uploadFailedWarning = e.invoice_upload_failed
+      ? '<span title="The invoice PDF failed to upload automatically — attach it by hand after assigning this entry." style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#f85149;background:#2d1212;border-radius:4px;padding:2px 6px">⚠ PDF upload failed</span>'
+      : '';
     return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #2a2a2a">
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         ${kind}
+        ${uploadFailedWarning}
         <span style="font-weight:600">${who}</span>
         <span style="color:#8b949e;font-size:12px">${fmtDate(e.date)}</span>
         ${link ? `<span style="font-size:12px">${link}</span>` : ''}
@@ -321,7 +329,9 @@ function renderTable() {
       : '';
     const invoiceBtn = e.invoice_path
       ? `<button class="btn-view-invoice" data-id="${e.id}" title="View attached invoice">📄 View</button>`
-      : `<button class="btn-attach-invoice" data-id="${e.id}" title="Attach invoice PDF">📎 Add</button>`;
+      : e.invoice_upload_failed
+        ? `<button class="btn-attach-invoice" data-id="${e.id}" title="The invoice PDF failed to upload automatically — attach it by hand" style="color:#f85149;font-weight:600">⚠ Add</button>`
+        : `<button class="btn-attach-invoice" data-id="${e.id}" title="Attach invoice PDF">📎 Add</button>`;
     const contractBtn = e.contract_link
       ? `<a href="${esc(e.contract_link)}" target="_blank" class="btn-view-contract" title="View contract">📄 View ↗</a>`
       : `<button class="btn-add-contract" data-id="${e.id}" title="Add a link to the signed contract">+ Add Link</button>`;
