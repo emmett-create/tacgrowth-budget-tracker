@@ -36,8 +36,20 @@ const MONTH_BUDGETS = {
       wlp1:      { label: 'WLP-1',     budget: 90_590, match: ['wlp1'] },
     },
   },
+  // November total confirmed as $35,000 (Lauren, 2026-11-10); no per-category
+  // breakdown given yet, so the 3 categories are split using October's same
+  // ~20/30/50 ratio as a placeholder — swap these 3 numbers for Michael's
+  // real split once it comes in, same as October replaced September's guess.
+  November: {
+    total: 35_000,
+    cats: {
+      hair:      { label: 'Hair',      budget: 7_000,  match: ['hair'] },
+      berberine: { label: 'Berberine', budget: 10_500, match: ['berberine'] },
+      wlp1:      { label: 'WLP-1',     budget: 17_500, match: ['wlp1'] },
+    },
+  },
 };
-let currentMonth = 'October';   // defaults to the current real-world month
+let currentMonth = 'November';   // defaults to the current real-world month
 
 const CATS = {
   hair:           'Hair',
