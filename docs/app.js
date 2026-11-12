@@ -703,6 +703,51 @@ function bindAll() {
     closeModal();
     await load();
   });
+  document.getElementById('dup-merge').addEventListener('click', async () => {
+    if (!dupContext) return;
+    const { mode, payload, isEdit, editId: eid, dupRow } = dupContext;
+
+    if (looksLikeContractOnly(dupRow)) {
+      // Direction A: the OLD row already in the tracker is the contract
+      // placeholder, and THIS new one is the real invoice — keep the
+      // invoice, carry the placeholder's link forward onto it, drop the
+      // placeholder. The whole point of Merge: don't lose that link the
+      // way plain Replace would (Lauren, 2026-11-10).
+      if (!payload.contract_link) {
+        payload.contract_link = dupRow.contract_link || dupRow.notes || null;
+      }
+      await remove(dupRow.id);
+      if (mode === 'pre') {
+        dupResolvedId = eid;
+        dupResolvedHandle = (payload.creator_handle || '').toLowerCase();
+        closeDupModal();
+        await load();   // refresh so the just-removed placeholder drops out of `rows`
+        openEditModal(payload);
+        return;
+      }
+      const ok = await performSave(payload, isEdit, eid);
+      closeDupModal();
+      if (!ok) { alert('Error saving — please try again.'); return; }
+      closeModal();
+      await load();
+      return;
+    }
+
+    // Direction B (the more common order, per Lauren's 2026-11-10 follow-up):
+    // the OLD row already in the tracker IS the real invoice, and THIS new
+    // one being assigned is just the DocuSign contract placeholder arriving
+    // after it — fold its link onto the existing invoice instead of ever
+    // creating a second, redundant row, and discard the placeholder outright
+    // (it never gets saved as its own entry, and the edit form never opens
+    // for it).
+    const link = payload.contract_link || payload.notes || null;
+    const ok = await update(dupRow.id, { contract_link: link });
+    if (isEdit && eid) await remove(eid);   // drop the now-redundant pending placeholder row
+    closeDupModal();
+    if (!ok) { alert('Error saving — please try again.'); return; }
+    closeModal();
+    await load();
+  });
   document.getElementById('dup-replace').addEventListener('click', async () => {
     if (!dupContext) return;
     const { mode, payload, isEdit, editId: eid, dupRow } = dupContext;
@@ -981,12 +1026,30 @@ function dupCard(label, entry) {
     </div>`;
 }
 
+function looksLikeContractOnly(entry) {
+  return !entry.invoice_number && !entry.due_date && !(+entry.amount > 0)
+    && (entry.notes || '').includes('docusign.com');
+}
+function looksLikeRealInvoice(entry) {
+  return !!entry.invoice_number || !!entry.due_date || +entry.amount > 0;
+}
+
 function openDupModal(dupRow, payload, isEdit, editId, opts) {
   const mode = opts?.mode || 'post';   // 'pre' = Assign+add click, before the edit form opens; 'post' = Save Changes
   dupContext = { mode, dupRow, payload, isEdit, editId };
   document.getElementById('dup-handle').textContent = `@${payload.creator_handle}`;
   document.getElementById('dup-compare').innerHTML =
     dupCard('Already in tracker', dupRow) + dupCard('This new one', payload);
+  // Merge only makes sense for the specific contract-placeholder + real-invoice
+  // pairing (Lauren, 2026-11-10) — hidden for every other duplicate pair, where
+  // Keep Both / Replace are still the right two options. Works in BOTH
+  // directions: the invoice can already be in the tracker with a DocuSign
+  // contract showing up after (the more common order — Lauren, 2026-11-10
+  // follow-up), or the contract placeholder can already be sitting there
+  // when the real invoice comes in later.
+  const offerMerge = (looksLikeContractOnly(dupRow) && looksLikeRealInvoice(payload))
+                   || (looksLikeRealInvoice(dupRow) && looksLikeContractOnly(payload));
+  document.getElementById('dup-merge').classList.toggle('hidden', !offerMerge);
   document.getElementById('dup-overlay').classList.remove('hidden');
 }
 function closeDupModal() {
